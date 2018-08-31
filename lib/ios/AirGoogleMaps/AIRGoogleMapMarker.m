@@ -62,8 +62,7 @@ CGRect unionRect(CGRect a, CGRect b) {
   [_iconView setFrame:CGRectMake(0, 0, width, height)];
   
   CGFloat scale = [[UIScreen mainScreen] scale];
-  CGRect rect = _iconView.frame;
-  UIGraphicsBeginImageContext((CGSize){scale * width, scale * height});
+  UIGraphicsBeginImageContext(CGSizeMake(scale * width, scale * height));
   CGContextRef context = UIGraphicsGetCurrentContext();
   CGContextScaleCTM(UIGraphicsGetCurrentContext(), scale, scale);
   [_iconView.layer renderInContext:context];
