@@ -249,7 +249,13 @@ RCT_EXPORT_METHOD(fitToCoordinates:(nonnull NSNumber *)reactTag
       CGFloat bottom = [RCTConvert CGFloat:edgePadding[@"bottom"]];
       CGFloat left = [RCTConvert CGFloat:edgePadding[@"left"]];
 
-      [mapView animateWithCameraUpdate:[GMSCameraUpdate fitBounds:bounds withEdgeInsets:UIEdgeInsetsMake(top, left, bottom, right)]];
+      UIEdgeInsets cameraInsets = UIEdgeInsetsMake(top, left, bottom, right);
+      GMSCameraUpdate *cameraUpdate = [GMSCameraUpdate fitBounds:bounds withEdgeInsets:cameraInsets];
+      if (animated) {
+        [mapView animateWithCameraUpdate:cameraUpdate];
+      } else {
+        [mapView moveCamera:cameraUpdate];
+      }
     }
   }];
 }
