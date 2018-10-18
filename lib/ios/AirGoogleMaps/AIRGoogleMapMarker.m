@@ -43,6 +43,10 @@ CGRect unionRect(CGRect a, CGRect b) {
 }
 
 - (void)layoutSubviews {
+  if (!_iconView) {
+    return;
+  }
+  
   float width = 0;
   float height = 0;
 
@@ -56,6 +60,17 @@ CGRect unionRect(CGRect a, CGRect b) {
   }
 
   [_iconView setFrame:CGRectMake(0, 0, width, height)];
+  
+  CGFloat scale = [[UIScreen mainScreen] scale];
+  UIGraphicsBeginImageContext(CGSizeMake(scale * width, scale * height));
+  CGContextRef context = UIGraphicsGetCurrentContext();
+  CGContextScaleCTM(UIGraphicsGetCurrentContext(), scale, scale);
+  [_iconView.layer renderInContext:context];
+  UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+  UIGraphicsEndImageContext();
+  UIImage *scaledImage = [UIImage imageWithCGImage:[image CGImage] scale:scale orientation:(image.imageOrientation)];
+  
+  _realMarker.icon = scaledImage;
 }
 
 - (id)eventFromMarker:(AIRGMSMarker*)marker {
@@ -77,9 +92,8 @@ CGRect unionRect(CGRect a, CGRect b) {
 }
 
 - (void)iconViewInsertSubview:(UIView*)subview atIndex:(NSInteger)atIndex {
-  if (!_realMarker.iconView) {
+  if (!_iconView) {
     _iconView = [[UIView alloc] init];
-    _realMarker.iconView = _iconView;
   }
   [_iconView insertSubview:subview atIndex:atIndex];
 }
@@ -198,62 +212,32 @@ CGRect unionRect(CGRect a, CGRect b) {
   }
 
   if (!_imageSrc) {
-    if (_iconImageView) [_iconImageView removeFromSuperview];
+    _realMarker.icon = nil;
     return;
   }
-
-  if (!_iconImageView) {
-    // prevent glitch with marker (cf. https://github.com/airbnb/react-native-maps/issues/738)
-    UIImageView *empyImageView = [[UIImageView alloc] init];
-    _iconImageView = empyImageView;
-    [self iconViewInsertSubview:_iconImageView atIndex:0];
+  
+  // prevent glitch with marker (cf. https://github.com/airbnb/react-native-maps/issues/738)
+  if (!_realMarker.icon) {
+    CGRect rect = CGRectMake(0.0f, 0.0f, 1.0f, 1.0f);
+    UIGraphicsBeginImageContext(rect.size);
+    CGContextRef context = UIGraphicsGetCurrentContext();
+    CGContextSetFillColorWithColor(context, UIColor.clearColor.CGColor);
+    CGContextFillRect(context, rect);
+    UIImage *emptyImage = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    _realMarker.icon = emptyImage;
   }
-
-  _reloadImageCancellationBlock = [_bridge.imageLoader loadImageWithURLRequest:[RCTConvert NSURLRequest:_imageSrc]
-                                                                          size:self.bounds.size
-                                                                         scale:RCTScreenScale()
-                                                                       clipped:YES
-                                                                    resizeMode:RCTResizeModeCenter
-                                                                 progressBlock:nil
-                                                              partialLoadBlock:nil
-                                                               completionBlock:^(NSError *error, UIImage *image) {
-                                                                 if (error) {
-                                                                   // TODO(lmr): do something with the error?
-                                                                   NSLog(@"%@", error);
-                                                                 }
-                                                                 dispatch_async(dispatch_get_main_queue(), ^{
-
-                                                                   // TODO(gil): This way allows different image sizes
-                                                                   if (self->_iconImageView) [self->_iconImageView removeFromSuperview];
-
-                                                                   // ... but this way is more efficient?
-//                                                                   if (_iconImageView) {
-//                                                                     [_iconImageView setImage:image];
-//                                                                     return;
-//                                                                   }
-
-                                                                   UIImageView *imageView = [[UIImageView alloc] initWithImage:image];
-
-                                                                   // TODO: w,h or pixel density could be a prop.
-                                                                   float density = 1;
-                                                                   float w = image.size.width/density;
-                                                                   float h = image.size.height/density;
-                                                                   CGRect bounds = CGRectMake(0, 0, w, h);
-
-                                                                   imageView.contentMode = UIViewContentModeScaleAspectFit;
-                                                                   [imageView setFrame:bounds];
-
-                                                                   // NOTE: sizeToFit doesn't work instead. Not sure why.
-                                                                   // TODO: Doing it this way is not ideal because it causes things to reshuffle
-                                                                   //       when the image loads IF the image is larger than the UIView.
-                                                                   //       Shouldn't required images have size info automatically via RN?
-                                                                   CGRect selfBounds = unionRect(bounds, self.bounds);
-                                                                   [self setFrame:selfBounds];
-
-                                                                   self->_iconImageView = imageView;
-                                                                   [self iconViewInsertSubview:imageView atIndex:0];
-                                                                 });
-                                                               }];
+  
+  _reloadImageCancellationBlock = [_bridge.imageLoader loadImageWithURLRequest:[RCTConvert NSURLRequest:_imageSrc] size:self.bounds.size scale:RCTScreenScale() clipped:YES resizeMode:RCTResizeModeCenter progressBlock:nil partialLoadBlock:nil completionBlock:^(NSError *error, UIImage *image) {
+    
+    if (error) {
+      // TODO(lmr): do something with the error?
+      NSLog(@"%@", error);
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+      _realMarker.icon = image;
+    });
+  }];
 }
 
 - (void)setTitle:(NSString *)title {
