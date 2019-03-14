@@ -5,6 +5,8 @@
 //  Created by Gil Birman on 9/2/16.
 //
 
+#ifdef HAVE_GOOGLE_MAPS
+
 #import "AIRGoogleMapMarker.h"
 #import <GoogleMaps/GoogleMaps.h>
 #import <React/RCTImageLoader.h>
@@ -46,7 +48,7 @@ CGRect unionRect(CGRect a, CGRect b) {
   if (!_iconView) {
     return;
   }
-  
+
   float width = 0;
   float height = 0;
 
@@ -60,7 +62,7 @@ CGRect unionRect(CGRect a, CGRect b) {
   }
 
   [_iconView setFrame:CGRectMake(0, 0, width, height)];
-  
+
   CGFloat scale = [[UIScreen mainScreen] scale];
   UIGraphicsBeginImageContext(CGSizeMake(scale * width, scale * height));
   CGContextRef context = UIGraphicsGetCurrentContext();
@@ -69,7 +71,7 @@ CGRect unionRect(CGRect a, CGRect b) {
   UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
   UIGraphicsEndImageContext();
   UIImage *scaledImage = [UIImage imageWithCGImage:[image CGImage] scale:scale orientation:(image.imageOrientation)];
-  
+
   _realMarker.icon = scaledImage;
 }
 
@@ -125,6 +127,26 @@ CGRect unionRect(CGRect a, CGRect b) {
 
 - (void)hideCalloutView {
   [_realMarker.map setSelectedMarker:Nil];
+}
+
+- (void)redraw {
+  if (!_realMarker.iconView) return;
+
+  BOOL oldValue = _realMarker.tracksViewChanges;
+
+  if (oldValue == YES)
+  {
+    // Immediate refresh, like right now. Not waiting for next frame.
+    UIView *view = _realMarker.iconView;
+    _realMarker.iconView = nil;
+    _realMarker.iconView = view;
+  }
+  else
+  {
+    // Refresh according to docs
+    _realMarker.tracksViewChanges = YES;
+    _realMarker.tracksViewChanges = NO;
+  }
 }
 
 - (UIView *)markerInfoContents {
@@ -215,7 +237,7 @@ CGRect unionRect(CGRect a, CGRect b) {
     _realMarker.icon = nil;
     return;
   }
-  
+
   // prevent glitch with marker (cf. https://github.com/airbnb/react-native-maps/issues/738)
   if (!_realMarker.icon) {
     CGRect rect = CGRectMake(0.0f, 0.0f, 1.0f, 1.0f);
@@ -227,9 +249,9 @@ CGRect unionRect(CGRect a, CGRect b) {
     UIGraphicsEndImageContext();
     _realMarker.icon = emptyImage;
   }
-  
+
   _reloadImageCancellationBlock = [_bridge.imageLoader loadImageWithURLRequest:[RCTConvert NSURLRequest:_imageSrc] size:self.bounds.size scale:RCTScreenScale() clipped:YES resizeMode:RCTResizeModeCenter progressBlock:nil partialLoadBlock:nil completionBlock:^(NSError *error, UIImage *image) {
-    
+
     if (error) {
       // TODO(lmr): do something with the error?
       NSLog(@"%@", error);
@@ -238,6 +260,34 @@ CGRect unionRect(CGRect a, CGRect b) {
       _realMarker.icon = image;
     });
   }];
+}
+
+- (void)setIconSrc:(NSString *)iconSrc
+{
+  _iconSrc = iconSrc;
+
+  if (_reloadImageCancellationBlock) {
+    _reloadImageCancellationBlock();
+    _reloadImageCancellationBlock = nil;
+  }
+
+  _reloadImageCancellationBlock =
+  [_bridge.imageLoader loadImageWithURLRequest:[RCTConvert NSURLRequest:_iconSrc]
+                                          size:self.bounds.size
+                                         scale:RCTScreenScale()
+                                       clipped:YES
+                                    resizeMode:RCTResizeModeCenter
+                                 progressBlock:nil
+                              partialLoadBlock:nil
+                               completionBlock:^(NSError *error, UIImage *image) {
+                                 if (error) {
+                                   // TODO(lmr): do something with the error?
+                                   NSLog(@"%@", error);
+                                 }
+                                 dispatch_async(dispatch_get_main_queue(), ^{
+                                   _realMarker.icon = image;
+                                 });
+                               }];
 }
 
 - (void)setTitle:(NSString *)title {
@@ -303,3 +353,5 @@ CGRect unionRect(CGRect a, CGRect b) {
 }
 
 @end
+
+#endif
